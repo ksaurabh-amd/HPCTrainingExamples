@@ -26,6 +26,11 @@ Usage:
     rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
               --summary-output-file=profile.out -- python3 resnet_v1.py    \
               --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+
+    #Using AMD profiler rocprof-compute (for roofline and HW level analysis)
+    rocprof-compute profile -n test2 --roof-only --kernel-names -- python \
+        resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 \
+        --epochs 2
     
 """
 
