@@ -27,9 +27,9 @@ cd version1_pytorch_baseline/
 python resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
 # Expected output:
-# Accuracy: ~82.5%
-# Speed: ~2,847 samples/sec
-# Memory: ~892 MB
+# Throughput: ~1,023 samples/sec
+# Peak memory: ~282 MB
+# Batch time: ~31.3 ms
 ```
 
 ### 3. Run with Profiling

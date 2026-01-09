@@ -43,9 +43,7 @@ epochs = 5                    # Training epochs
 |-------|--------|------------|-----------------|-----------------|
 | ResNet-18 | 18 | 11.7M | ~890 MB | ~2.1 GB |
 | ResNet-34 | 34 | 21.8M | ~1.2 GB | ~3.8 GB |
-| ResNet-50 | 50 | 25.6M | ~1.4 GB | ~4.2 GB |
-| ResNet-101 | 101 | 44.5M | ~2.1 GB | ~6.8 GB |
-| ResNet-152 | 152 | 60.2M | ~2.8 GB | ~8.9 GB |
+
 
 ## Implementation Details
 
@@ -107,9 +105,9 @@ The implementation ensures reproducible results through:
 python resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
 # Expected output:
-# Final accuracy: ~82.5%
-# Throughput: ~2,847 samples/sec
-# Peak memory: ~892 MB
+# Throughput: ~1,023 samples/sec
+# Peak memory: ~282 MB
+# Batch time: ~31.3 ms
 ```
 
 **Analysis Questions**:
@@ -160,20 +158,16 @@ tensorboard --logdir ./profiles
 # Test ResNet-18
 python resnet_v1.py --model resnet18 --batch-size 32 --epochs 2
 
-# Test ResNet-50
-python resnet_v1.py --model resnet50 --batch-size 32 --epochs 2
-
-# Test ResNet-101 (if memory allows)
-python resnet_v1.py --model resnet101 --batch-size 16 --epochs 2
+# Test ResNet-34
+python resnet_v1.py --model resnet34 --batch-size 32 --epochs 2
 ```
 
 **Comparison Matrix**:
 
-| Model | Throughput (samples/sec) | Memory (MB) | Accuracy | Parameters |
-|-------|-------------------------|-------------|----------|------------|
-| ResNet-18 | ~2,847 | 892 | 82.5% | 11.7M |
-| ResNet-50 | ~1,245 | 1,380 | 84.2% | 25.6M |
-| ResNet-101 | ~687 | 2,120 | 85.1% | 44.5M |
+| Model | Throughput (samples/sec) | Memory (MB) | Batch Time | Parameters |
+|-------|-------------------------|-------------|------------|------------|
+| ResNet-18 | ~1,023 | 282 | 31.3 ms | 11.7M |
+| ResNet-34 | ~804 | 400.7 | 42.7 ms | 21.8M |
 
 ### Exercise 4: Batch Size Optimization
 
@@ -235,12 +229,14 @@ tensorboard --logdir ./profiles --port 6006
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Throughput** | 2,847 samples/sec | Training speed |
-| **Batch Time** | 11.2 ms | Per-batch processing |
-| **Forward Time** | 4.8 ms | Forward pass only |
-| **Backward Time** | 5.1 ms | Backward pass only |
-| **Memory Usage** | 892 MB | Peak GPU memory |
-| **Final Accuracy** | 82.5% | CIFAR-10 validation |
+| **Throughput** | 1,023 samples/sec | Training speed |
+| **Batch Time** | 31.3 ms | Per-batch processing |
+| **Forward Time** | 9.5 ms | Forward pass only |
+| **Backward Time** | 20.8 ms | Backward pass only |
+| **Optimizer Time** | 0.7 ms | Optimizer step |
+| **Memory Usage** | 282 MB | Peak GPU memory |
+| **Final Accuracy** | 24.4% | After 5 epochs (101 batches/epoch) |
+
 
 ### Performance Characteristics
 

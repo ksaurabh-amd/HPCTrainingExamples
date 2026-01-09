@@ -17,14 +17,16 @@ Usage:
     # Basic training
     python resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
-    # With PyTorch profiler
-    python resnet_v1.py --enable-pytorch-profiler --profile-dir ./profiles
-
-    # With memory profiling
-    python resnet_v1.py --enable-pytorch-profiler --profile-memory
-
     # Complete profiling suite
-    python resnet_v1.py --enable-pytorch-profiler --profile-memory --profile-dir ./profiles
+    python resnet_v1.py --enable-pytorch-profiler --profile-memory \
+            --profile-with-stack --profile-with-flops --profile-dir ./profiles \
+            --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+
+    # Using AMD profiler rocprofv3
+    rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
+              --summary-output-file=profile.out -- python3 resnet_v1.py    \
+              --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+    
 """
 
 import torch
@@ -44,7 +46,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, List, Any, Tuple
 import warnings
 from datetime import datetime
-
+from analyze_trace import TraceAnalyzer
 # Performance monitoring imports
 try:
     import psutil
@@ -493,6 +495,14 @@ def setup_pytorch_profiler(profiler_config: ProfilerConfig) -> Optional[profile]
     if torch.cuda.is_available():
         activities.append(ProfilerActivity.CUDA)
     
+    trace_files = []
+    
+    def trace_handler(prof):
+        """Custom trace handler to capture filenames and run analysis."""
+        # Get the output filename
+        output_path = prof.export_chrome_trace(str(profile_dir / f"trace.pt.json"))
+        trace_files.append(output_path)
+
     profiler = profile(
         activities=activities,
         record_shapes=True,
@@ -505,7 +515,7 @@ def setup_pytorch_profiler(profiler_config: ProfilerConfig) -> Optional[profile]
             active=profiler_config.active_steps,
             repeat=profiler_config.repeat
         ),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(str(profile_dir))
+        on_trace_ready=trace_handler
     )
     
     return profiler
@@ -713,12 +723,52 @@ def train_resnet_v1(
     # Save performance data
     save_performance_data(config, profiler_config, summary_stats, dataset_name)
     
-    # Profiler cleanup
+    # Profiler cleanup and analysis
     if profiler:
         profiler.stop()
+        
+        print(f"\n{'='*80}")
+        print("Record Function Timing Analysis:")
+        print(f"{'='*80}")
+
+        events = profiler.key_averages()
+        target_functions = ['forward_pass','backward_pass','optimizer_step']
+        
+        # Aggregate events by key to handle duplicates from forward/backward passes
+        event_map = {}
+        for evt in events:
+     
+            if evt.key in target_functions:
+                if evt.key not in event_map:
+                    event_map[evt.key] = {
+                        'total_time': 0,
+                        'count': 0
+                    }
+                # Use CPU time as total time (includes kernel launch overhead)
+                event_map[evt.key]['total_time'] += evt.cpu_time_total
+                event_map[evt.key]['count'] += evt.count
+        
+        # Print aggregated results
+        for key in target_functions:
+            if key in event_map and event_map[key]['total_time'] > 0:
+                total_time_ms = event_map[key]['total_time'] / 1000
+                count = event_map[key]['count']
+                avg_time_ms = total_time_ms / count if count > 0 else 0.0
+                
+                print(f"{key:30s} | "
+                      f"Total: {total_time_ms:8.2f}ms | "
+                      f"Calls: {count:6d} | "
+                      f"Avg: {avg_time_ms:6.3f}ms")
+        
         print(f"\nProfiler traces saved to: {profiler_config.profile_dir}")
         print("Use 'tensorboard --logdir ./profiles' to view the traces")
-    
+        # Analyze trace files
+            
+        profile_dir = Path(profiler_config.profile_dir)
+        analyzer = TraceAnalyzer(profile_dir / f"trace.pt.json")
+        stats = analyzer.run()
+        analyzer.print_summary(1000)
+        
     print(f"\nTraining completed successfully!")
     return model, summary_stats
 
