@@ -238,6 +238,14 @@ tensorboard --logdir ./profiles --port 6006
 | **Final Accuracy** | 24.4% | After 5 epochs (101 batches/epoch) |
 
 
+In order to get the GPU kernel names and their corresponding time, we can use rocprofv3:
+
+```bash
+rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
+              --summary-output-file=profile.out -- python3 resnet_v1.py    \
+              --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+```
+
 ### Performance Characteristics
 
 1. **Compute Bound Operations**
@@ -255,25 +263,7 @@ tensorboard --logdir ./profiles --port 6006
    - Small tensor transfers
    - Kernel launch overhead
 
-## Expected Analysis Results
 
-### Profiling Insights
-
-1. **Top Time-Consuming Operations**
-   - `aten::conv2d`: 45-55% of total time
-   - `aten::batch_norm`: 8-12% of total time
-   - `aten::relu`: 3-5% of total time
-   - `aten::add_`: 2-4% of total time (residual connections)
-
-2. **Memory Allocation Hotspots**
-   - Convolution output tensors: Largest allocations
-   - Gradient tensors: Secondary memory usage
-   - Batch norm statistics: Frequent small allocations
-
-3. **Optimization Opportunities**
-   - **Operator Fusion**: Combine conv-bn-relu operations
-   - **Memory Optimization**: Reduce peak memory usage
-   - **Kernel Optimization**: Custom kernels for specific operations
 
 ## Troubleshooting
 
