@@ -51,7 +51,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, List, Any, Tuple
 import warnings
 from datetime import datetime
-from analyze_trace import TraceAnalyzer
+
 # Performance monitoring imports
 try:
     import psutil
@@ -187,7 +187,7 @@ def setup_deterministic_environment():
         torch.cuda.manual_seed_all(42)
     
     # Enable deterministic operations
-    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = False
     
     # Suppress warnings for cleaner output
@@ -218,25 +218,20 @@ class BasicBlock(nn.Module):
         self.stride = stride
 
     def forward(self, x):
-        with record_function("basic_block"):
-            identity = x
+        identity = x
 
-            with record_function("conv1_bn1_relu"):
-                out = self.conv1(x)
-                out = self.bn1(out)
-                out = self.relu(out)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
 
-            with record_function("conv2_bn2"):
-                out = self.conv2(out)
-                out = self.bn2(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
 
-            with record_function("shortcut"):
-                if self.downsample is not None:
-                    identity = self.downsample(x)
+        if self.downsample is not None:
+            identity = self.downsample(x)
 
-            with record_function("residual_add_relu"):
-                out += identity
-                out = self.relu(out)
+        out += identity
+        out = self.relu(out)
 
         return out
 
@@ -264,30 +259,24 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def forward(self, x):
-        with record_function("bottleneck_block"):
-            identity = x
+        identity = x
 
-            with record_function("conv1_bn1_relu"):
-                out = self.conv1(x)
-                out = self.bn1(out)
-                out = self.relu(out)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
 
-            with record_function("conv2_bn2_relu"):
-                out = self.conv2(out)
-                out = self.bn2(out)
-                out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
 
-            with record_function("conv3_bn3"):
-                out = self.conv3(out)
-                out = self.bn3(out)
+        out = self.conv3(out)
+        out = self.bn3(out)
 
-            with record_function("shortcut"):
-                if self.downsample is not None:
-                    identity = self.downsample(x)
+        if self.downsample is not None:
+            identity = self.downsample(x)
 
-            with record_function("residual_add_relu"):
-                out += identity
-                out = self.relu(out)
+        out += identity
+        out = self.relu(out)
 
         return out
 
@@ -378,29 +367,19 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        with record_function("resnet_forward"):
-            with record_function("stem"):
-                x = self.conv1(x)
-                x = self.bn1(x)
-                x = self.relu(x)
-                x = self.maxpool(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
 
-            with record_function("layer1"):
-                x = self.layer1(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
 
-            with record_function("layer2"):
-                x = self.layer2(x)
-
-            with record_function("layer3"):
-                x = self.layer3(x)
-
-            with record_function("layer4"):
-                x = self.layer4(x)
-
-            with record_function("classifier"):
-                x = self.avgpool(x)
-                x = torch.flatten(x, 1)
-                x = self.fc(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
 
         return x
 
@@ -528,7 +507,7 @@ def setup_pytorch_profiler(profiler_config: ProfilerConfig) -> Optional[profile]
 
 def calculate_accuracy(outputs: torch.Tensor, targets: torch.Tensor) -> float:
     """Calculate classification accuracy."""
-    _, predicted = outputs.max(1)
+    _, predicted= outputs.max(1)
     total = targets.size(0)
     correct = predicted.eq(targets).sum().item()
     return 100. * correct / total
@@ -685,10 +664,6 @@ def train_resnet_v1(
                       f"Acc: {accuracy:.2f}% | "
                       f"Speed: {samples_per_sec:.1f} samples/sec | "
                       f"Memory: {memory_mb:.1f} MB")
-            
-            # Limit batches for quick demonstration
-            if batch_idx >= 100:  # Process only first 100 batches
-                break
         
         # Update learning rate
         scheduler.step()
@@ -767,12 +742,6 @@ def train_resnet_v1(
         
         print(f"\nProfiler traces saved to: {profiler_config.profile_dir}")
         print("Use 'tensorboard --logdir ./profiles' to view the traces")
-        # Analyze trace files
-            
-        profile_dir = Path(profiler_config.profile_dir)
-        analyzer = TraceAnalyzer(profile_dir / f"trace.pt.json")
-        stats = analyzer.run()
-        analyzer.print_summary(1000)
         
     print(f"\nTraining completed successfully!")
     return model, summary_stats

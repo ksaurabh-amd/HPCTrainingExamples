@@ -113,7 +113,6 @@ python resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 
 **Analysis Questions**:
 - What is the training throughput (samples/sec)?
 - How much GPU memory is being used?
-- What is the final validation accuracy?
 
 ### Exercise 2: PyTorch Profiler Analysis
 
@@ -144,6 +143,27 @@ tensorboard --logdir ./profiles
 - Batch normalization: 10-15% of compute time  
 - Memory transfers: 5-10% of total time
 - Kernel launch overhead: Significant opportunity
+
+#### rocprofv3 Kernel Trace Analysis
+
+To get detailed GPU kernel names and execution times, use rocprofv3:
+
+```bash
+# Profile GPU kernels with detailed traces
+rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
+    --summary-output-file=profile.out -- python3 resnet_v1.py \
+    --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+```
+
+**rocprofv3 Analysis Tasks**:
+- Count total kernel launches per epoch
+- Identify most frequently called kernels
+- Find kernels with highest execution time
+- Compare kernel patterns across model layers
+
+**Expected Kernel Count**:
+- ResNet-18: ~540 unique kernel launches per forward+backward pass
+- Dominant kernels: MIOpen convolution kernels (60-70% of time)
 
 ### Exercise 3: Model Scaling Analysis
 
@@ -235,16 +255,6 @@ tensorboard --logdir ./profiles --port 6006
 | **Backward Time** | 20.8 ms | Backward pass only |
 | **Optimizer Time** | 0.7 ms | Optimizer step |
 | **Memory Usage** | 282 MB | Peak GPU memory |
-| **Final Accuracy** | 24.4% | After 5 epochs (101 batches/epoch) |
-
-
-In order to get the GPU kernel names and their corresponding time, we can use rocprofv3:
-
-```bash
-rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
-              --summary-output-file=profile.out -- python3 resnet_v1.py    \
-              --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
-```
 
 ### Performance Characteristics
 
@@ -269,32 +279,8 @@ rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
 
 ### Common Issues
 
-#### Out of Memory (OOM)
-```
-RuntimeError: CUDA out of memory
-```
-**Solutions**:
-- Reduce batch size: `--batch-size 16`
-- Use smaller model: `--model resnet18`
-- Enable gradient checkpointing (V2+)
 
-#### Slow Performance
-```
-Warning: Training speed below expected
-```
-**Diagnostics**:
-- Check GPU utilization: `rocm-smi`
-- Verify data loading: `--num-workers 0`
-- Profile memory bandwidth: Enable memory profiling
 
-#### Profiler Issues
-```
-Warning: Profiler traces not generated
-```
-**Solutions**:
-- Check disk space in profile directory
-- Verify PyTorch version supports profiling
-- Use basic profiling first: `--enable-pytorch-profiler`
 
 ### Performance Debugging
 
@@ -316,8 +302,6 @@ After completing Version 1:
 2. **Identify Bottlenecks**: Focus on highest-impact optimization opportunities
 3. **Prepare for Version 2**: Understand operator fusion concepts
 
-Version 2 will introduce operator fusion to reduce kernel launch overhead and improve memory efficiency, targeting 1.5x speedup over this baseline.
-
 ## Performance Summary Template
 
 Use this template to record your baseline results:
@@ -336,19 +320,16 @@ Performance Metrics:
 - Peak Memory: _____ MB
 - Final Accuracy: _____%
 
-Top Operations (from profiler):
-1. aten::conv2d: _____%
-2. aten::batch_norm: _____%
-3. aten::relu: _____%
-
-Optimization Opportunities:
-- [ ] Operator fusion potential
-- [ ] Memory optimization needed
-- [ ] Custom kernel opportunities
-
 Notes:
 _________________________________
 _________________________________
 ```
 
-Ready to establish your ResNet baseline? Start with Exercise 1!
+# Optimization 
+
+Change `    torch.backends.cudnn.deterministic` to `True`
+
+- Are you seeing any speedup?
+- What is the new performance that you are seeing?
+- What are the kernels that are being launched?
+- Perform analysis between deterministic mode and non-deterministic mode. 
