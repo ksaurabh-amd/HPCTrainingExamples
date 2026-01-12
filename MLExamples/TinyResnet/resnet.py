@@ -15,21 +15,21 @@ Features:
 
 Usage:
     # Basic training
-    python resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
+    python resnet.py --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
     # Complete profiling suite
-    python resnet_v1.py --enable-pytorch-profiler --profile-memory \
+    python resnet.py --enable-pytorch-profiler --profile-memory \
             --profile-with-stack --profile-with-flops --profile-dir ./profiles \
             --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
     # Using AMD profiler rocprofv3
     rocprofv3 --kernel-trace --marker-trace --summary --summary-per-domain \
-              --summary-output-file=profile.out -- python3 resnet_v1.py    \
+              --summary-output-file=profile.out -- python3 resnet.py    \
               --model resnet18 --dataset cifar10 --batch-size 32 --epochs 5
 
     #Using AMD profiler rocprof-compute (for roofline and HW level analysis)
     rocprof-compute profile -n test2 --roof-only --kernel-names -- python \
-        resnet_v1.py --model resnet18 --dataset cifar10 --batch-size 32 \
+        resnet.py --model resnet18 --dataset cifar10 --batch-size 32 \
         --epochs 2
     
 """
@@ -542,6 +542,15 @@ def train_resnet_v1(
     
     # Create model
     model = get_resnet_model(config).to(device)
+    # Compile the model for automatic fusion
+    # TorchInductor will fuse operations during training
+    model = torch.compile(
+        model,
+        mode='max-autotune',  # Most aggressive optimization
+        fullgraph=True,       # Compile entire forward pass
+        backend='inductor'    # Use TorchInductor backend
+    )
+    
     total_params = sum(p.numel() for p in model.parameters())
     
     print(f"\nModel Configuration:")
@@ -672,11 +681,19 @@ def train_resnet_v1(
         epoch_time = time.time() - epoch_start_time
         avg_loss = running_loss / num_batches
         avg_accuracy = running_accuracy / num_batches
+        epoch_throughput = (num_batches * config.batch_size) / epoch_time
         
         print(f"\nEpoch {epoch+1} Summary:")
         print(f"   Average Loss: {avg_loss:.4f}")
         print(f"   Average Accuracy: {avg_accuracy:.2f}%") 
         print(f"   Epoch Time: {epoch_time:.2f} seconds")
+        print(f"   Throughput: {epoch_throughput:.1f} samples/sec")
+        
+        # Reset performance monitor after first epoch (warmup)
+        if epoch == 0:
+            print("\n⚠ Resetting performance monitor (excluding epoch 1 from statistics)")
+            performance_monitor.reset()
+            total_batches = 0
         print("-" * 60)
     
     print("=" * 80)
@@ -684,7 +701,7 @@ def train_resnet_v1(
     # Performance analysis
     summary_stats = performance_monitor.get_summary_stats()
     
-    print(f"\nPerformance Summary:")
+    print(f"\nPerformance Summary (Epochs 2-{config.epochs}):")
     print(f"   Total batches processed: {total_batches:,}")
     if summary_stats:
         print(f"   Average batch time: {summary_stats.get('avg_batch_time_ms', 0):.1f} ms")
