@@ -52,6 +52,7 @@ from typing import Optional, Dict, List, Any, Tuple
 import warnings
 from datetime import datetime
 
+import roctx
 # Performance monitoring imports
 try:
     import psutil
@@ -544,12 +545,12 @@ def train_resnet_v1(
     model = get_resnet_model(config).to(device)
     # Compile the model for automatic fusion
     # TorchInductor will fuse operations during training
-    model = torch.compile(
-        model,
-        mode='max-autotune',  # Most aggressive optimization
-        fullgraph=True,       # Compile entire forward pass
-        backend='inductor'    # Use TorchInductor backend
-    )
+    # model = torch.compile(
+    #     model,
+    #     mode='max-autotune',  # Most aggressive optimization
+    #     fullgraph=True,       # Compile entire forward pass
+    #     backend='inductor'    # Use TorchInductor backend
+    # )
     
     total_params = sum(p.numel() for p in model.parameters())
     
@@ -600,6 +601,11 @@ def train_resnet_v1(
     
     for epoch in range(config.epochs):
         epoch_start_time = time.time()
+        if(epoch == 2):
+            roctx.profilerResume(roctx.getThreadId())
+        if(epoch == 3):
+            roctx.profilerPause(roctx.getThreadId())
+        roctx.rangePush("Epoch_" + str(epoch))
         running_loss = 0.0
         running_accuracy = 0.0
         num_batches = 0
@@ -612,8 +618,10 @@ def train_resnet_v1(
             # Forward pass
             forward_start = time.time()
             with record_function("forward_pass"):
+                roctx.rangePush("forward_epoch_" + str(epoch) + "_batch_id_" + str(batch_idx))
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
+                roctx.rangePop()
             
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
@@ -623,7 +631,9 @@ def train_resnet_v1(
             backward_start = time.time()
             optimizer.zero_grad()
             with record_function("backward_pass"):
+                roctx.rangePush("backward_epoch_" + str(epoch) + "_batch_id_" + str(batch_idx))
                 loss.backward()
+                roctx.rangePop()
             
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
@@ -695,6 +705,7 @@ def train_resnet_v1(
             performance_monitor.reset()
             total_batches = 0
         print("-" * 60)
+        roctx.rangePop()
     
     print("=" * 80)
     
